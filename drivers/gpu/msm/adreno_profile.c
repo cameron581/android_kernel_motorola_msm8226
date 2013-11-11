@@ -441,11 +441,6 @@ static void transfer_results(struct kgsl_device *device,
 					profile, *(ptr + buf_off++));
 			if (assigns_list == NULL) {
 				*log_ptr = (unsigned int) -1;
-
-				shared_buf_inc(profile->shared_size,
-					&profile->shared_tail,
-					SIZE_SHARED_ENTRY(cnt));
-
 				goto err;
 			} else {
 				*log_ptr = assigns_list->groupid << 16 |
@@ -1106,7 +1101,7 @@ void adreno_profile_preib_processing(struct kgsl_device *device,
 	if (SIZE_SHARED_ENTRY(count) >= shared_buf_available(profile))
 		goto done;
 
-	if (entry_head + SIZE_SHARED_ENTRY(count) >= profile->shared_size) {
+	if (entry_head + SIZE_SHARED_ENTRY(count) > profile->shared_size) {
 		/* entry_head would wrap, start entry_head at 0 in buffer */
 		entry_head = 0;
 		profile->shared_size = profile->shared_head;

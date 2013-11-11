@@ -62,7 +62,6 @@
 #define ADRENO_DEFAULT_PWRSCALE_POLICY  NULL
 #endif
 
-void adreno_debugfs_init(struct kgsl_device *device);
 
 #define ADRENO_ISTORE_START 0x5000 /* Istore offset */
 
@@ -149,12 +148,6 @@ enum adreno_dispatcher_flags {
 
 struct adreno_gpudev;
 
-struct adreno_busy_data {
-	unsigned int gpu_busy;
-	unsigned int vbif_ram_cycles;
-	unsigned int vbif_starved_ram;
-};
-
 struct adreno_device {
 	struct kgsl_device dev;    /* Must be first field in this struct */
 	unsigned long priv;
@@ -195,15 +188,11 @@ struct adreno_device {
 	unsigned int gpulist_index;
 	struct ocmem_buf *ocmem_hdl;
 	unsigned int ocmem_base;
+	unsigned int gpu_cycles;
 	struct adreno_profile profile;
 	struct kgsl_memdesc pwron_fixup;
 	unsigned int pwron_fixup_dwords;
 	struct adreno_dispatcher dispatcher;
-	struct adreno_busy_data busy_data;
-
-	struct work_struct start_work;
-	struct work_struct input_work;
-	unsigned int ram_cycles_lo;
 };
 
 /**
@@ -216,7 +205,6 @@ enum adreno_device_flags {
 	ADRENO_DEVICE_PWRON = 0,
 	ADRENO_DEVICE_PWRON_FIXUP = 1,
 	ADRENO_DEVICE_INITIALIZED = 2,
-	ADRENO_DEVICE_STARTED = 3,
 };
 
 #define PERFCOUNTER_FLAG_NONE 0x0
@@ -232,7 +220,6 @@ enum adreno_device_flags {
  * @offset: register hardware offset
  * @load_bit: The bit number in LOAD register which corresponds to this counter
  * @select: The countable register offset
- * @value: The 64 bit countable register value
  */
 struct adreno_perfcount_register {
 	unsigned int countable;
@@ -241,7 +228,6 @@ struct adreno_perfcount_register {
 	unsigned int offset;
 	int load_bit;
 	unsigned int select;
-	uint64_t value;
 };
 
 /**
@@ -254,18 +240,7 @@ struct adreno_perfcount_group {
 	struct adreno_perfcount_register *regs;
 	unsigned int reg_count;
 	const char *name;
-	unsigned long flags;
 };
-
-/*
- * ADRENO_PERFCOUNTER_GROUP_FIXED indicates that a perfcounter group is fixed -
- * instead of having configurable countables like the other groups, registers in
- * fixed groups have a hardwired countable.  So when the user requests a
- * countable in one of these groups, that countable should be used as the
- * register offset to return
- */
-
-#define ADRENO_PERFCOUNTER_GROUP_FIXED BIT(0)
 
 /**
  * adreno_perfcounts: all available perfcounter groups
@@ -278,11 +253,7 @@ struct adreno_perfcounters {
 };
 
 #define ADRENO_PERFCOUNTER_GROUP(core, name) { core##_perfcounters_##name, \
-	ARRAY_SIZE(core##_perfcounters_##name), __stringify(name), 0 }
-
-#define ADRENO_PERFCOUNTER_GROUP_FLAGS(core, name, flags) \
-	{ core##_perfcounters_##name, \
-	ARRAY_SIZE(core##_perfcounters_##name), __stringify(name), flags }
+	ARRAY_SIZE(core##_perfcounters_##name), __stringify(name) }
 
 /**
  * adreno_regs: List of registers that are used in kgsl driver for all
@@ -379,17 +350,11 @@ struct adreno_gpudev {
 	int (*rb_init)(struct adreno_device *, struct adreno_ringbuffer *);
 	int (*perfcounter_init)(struct adreno_device *);
 	void (*perfcounter_close)(struct adreno_device *);
-	void (*perfcounter_save)(struct adreno_device *);
-	void (*perfcounter_restore)(struct adreno_device *);
-	void (*fault_detect_start)(struct adreno_device *);
-	void (*fault_detect_stop)(struct adreno_device *);
 	void (*start)(struct adreno_device *);
+	unsigned int (*busy_cycles)(struct adreno_device *);
 	int (*perfcounter_enable)(struct adreno_device *, unsigned int group,
 		unsigned int counter, unsigned int countable);
-	void (*busy_cycles)(struct adreno_device *, struct adreno_busy_data *);
 	uint64_t (*perfcounter_read)(struct adreno_device *adreno_dev,
-		unsigned int group, unsigned int counter);
-	void (*perfcounter_write)(struct adreno_device *adreno_dev,
 		unsigned int group, unsigned int counter);
 	int (*coresight_enable) (struct kgsl_device *device);
 	void (*coresight_disable) (struct kgsl_device *device);
@@ -399,7 +364,7 @@ struct adreno_gpudev {
 	void (*postmortem_dump)(struct adreno_device *adreno_dev);
 };
 
-#define FT_DETECT_REGS_COUNT 14
+#define FT_DETECT_REGS_COUNT 12
 
 struct log_field {
 	bool show;
@@ -878,21 +843,6 @@ static inline int adreno_bootstrap_ucode(struct adreno_device *adreno_dev)
 		return 1;
 	else
 		return 0;
-}
-
-/**
- * adreno_get_rptr() - Get the current ringbuffer read pointer
- * @rb: Pointer the ringbuffer to query
- *
- * Get the current read pointer from the GPU register.
- */
-static inline unsigned int
-adreno_get_rptr(struct adreno_ringbuffer *rb)
-{
-	struct adreno_device *adreno_dev = ADRENO_DEVICE(rb->device);
-	unsigned int result;
-	adreno_readreg(adreno_dev, ADRENO_REG_CP_RB_RPTR, &result);
-	return result;
 }
 
 #endif /*__ADRENO_H */
