@@ -442,3 +442,5 @@ obj-$(CONFIG_MMI_MSM_PINMUX) += mmi-pinmux.o
 obj-$(CONFIG_PERFMAP) += perfmap.o
 
 obj-$(CONFIG_INTELLI_PLUG) += intelli_plug.o
+
++obj-$(CONFIG_MSM_CPUFREQ_LIMITER) += cpufreq_limit.o
